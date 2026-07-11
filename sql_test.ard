@@ -1,0 +1,104 @@
+use ard/testing
+
+use decode/decode
+use sql/sql
+
+// Integration tests for the sql module + FFI shim.
+//
+// These live outside store_test.ard because they exercise sql.ard's
+// contract with the underlying database/sql layer (specifically: what
+// happens to NULLs on the round-trip), not the schema_migrations store.
+
+// Gap 1 from the FFI normalize follow-up: a SQL NULL must arrive on the
+// Ard side as a value that `decode::nullable` can detect. If the FFI
+// accidentally stringified it or dropped it, downstream code would see a
+// decode error instead of a proper "column was NULL" signal.
+test fn sql_null_survives_as_nil_for_decode_nullable() Void!Str {
+  let db = try sql::open(":memory:")
+
+  try db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+  try db.exec("INSERT INTO t (id, name) VALUES (1, NULL)")
+  try db.exec("INSERT INTO t (id, name) VALUES (2, 'ada')")
+
+  let rows = try db.query("SELECT name FROM t ORDER BY id ASC").all([:])
+  try testing::assert(rows.size() == 2, "two rows returned")
+
+  let null_row = rows.at(0).expect("row 0")
+  let null_name = try decode::run(null_row, decode::field("name", decode::nullable(decode::string))) -> err {
+    Result::err(err.to_str())
+  }
+  try testing::assert(null_name.is_none(), "NULL name decodes to Maybe::new()")
+
+  let value_row = rows.at(1).expect("row 1")
+  let value_name = try decode::run(value_row, decode::field("name", decode::nullable(decode::string))) -> err {
+    Result::err(err.to_str())
+  }
+  try testing::assert(value_name.expect("has value") == "ada", "non-null name decodes to the string")
+
+  try db.close()
+  testing::pass()
+}
+
+test fn query_supports_named_parameters() Void!Str {
+  let db = try sql::open(":memory:")
+  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
+
+  try db.query("INSERT INTO users (id, name) VALUES (@id, @name)").run(["id": 1, "name": "ada"])
+  let row = try db.query("SELECT name FROM users WHERE id = @id").first(["id": 1])
+  let name = try decode::run(row.expect("matching row"), decode::field("name", decode::string)) -> err {
+    Result::err(err.to_str())
+  }
+
+  try testing::assert(name == "ada", "binds named parameters")
+  try db.close()
+  testing::pass()
+}
+
+test fn first_returns_none_when_no_rows_match() Void!Str {
+  let db = try sql::open(":memory:")
+  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+  let row = try db.query("SELECT id FROM users").first([:])
+  try testing::assert(row.is_none(), "empty query has no first row")
+  try db.close()
+  testing::pass()
+}
+
+test fn transaction_commit_persists_changes() Void!Str {
+  let db = try sql::open(":memory:")
+  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+  let tx = try db.begin()
+  try tx.query("INSERT INTO users (id) VALUES (@id)").run(["id": 1])
+  try tx.commit()
+
+  let rows = try db.query("SELECT id FROM users").all([:])
+  try testing::assert(rows.size() == 1, "committed row is visible")
+  try db.close()
+  testing::pass()
+}
+
+test fn transaction_rollback_discards_changes() Void!Str {
+  let db = try sql::open(":memory:")
+  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+  let tx = try db.begin()
+  try tx.query("INSERT INTO users (id) VALUES (@id)").run(["id": 1])
+  try tx.rollback()
+
+  let rows = try db.query("SELECT id FROM users").all([:])
+  try testing::assert(rows.size() == 0, "rolled back row is absent")
+  try db.close()
+  testing::pass()
+}
+
+test fn query_reports_missing_parameters() Void!Str {
+  let db = try sql::open(":memory:")
+  match db.query("SELECT @missing").all([:]) {
+    ok(_) => {
+      try db.close()
+      testing::fail("missing parameter should fail")
+    },
+    err(e) => {
+      try db.close()
+      testing::assert(e == "Missing parameter: missing", "identifies the missing parameter")
+    },
+  }
+}

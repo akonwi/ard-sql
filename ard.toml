@@ -1,0 +1,5 @@
+ard = ">= 0.26.0"
+name = "sql"
+
+[dependencies]
+decode = { path = "../decode" }
