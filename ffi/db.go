@@ -10,6 +10,8 @@ package ffi
 
 import (
 	"database/sql"
+	"reflect"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -56,12 +58,12 @@ func Close(db *DB) error {
 // --- Non-transactional operations ---
 
 func ExecDB(db *DB, query string, args []any) error {
-	_, err := db.inner.Exec(query, args...)
+	_, err := db.inner.Exec(query, bindArgs(args)...)
 	return err
 }
 
 func QueryDB(db *DB, query string, args []any) ([]any, error) {
-	return scanRows(db.inner.Query(query, args...))
+	return scanRows(db.inner.Query(query, bindArgs(args)...))
 }
 
 func Begin(db *DB) (*Tx, error) {
@@ -75,12 +77,12 @@ func Begin(db *DB) (*Tx, error) {
 // --- Transactional operations ---
 
 func ExecTx(tx *Tx, query string, args []any) error {
-	_, err := tx.inner.Exec(query, args...)
+	_, err := tx.inner.Exec(query, bindArgs(args)...)
 	return err
 }
 
 func QueryTx(tx *Tx, query string, args []any) ([]any, error) {
-	return scanRows(tx.inner.Query(query, args...))
+	return scanRows(tx.inner.Query(query, bindArgs(args)...))
 }
 
 func Commit(tx *Tx) error {
@@ -92,6 +94,38 @@ func Rollback(tx *Tx) error {
 }
 
 // --- Internal ---
+
+// bindArgs maps Ard values into driver-friendly bind parameters.
+// Notably it unwraps Ard's Maybe[T] optionals: a none becomes SQL NULL,
+// a some becomes its inner value. Detection is by method shape
+// (IsNone() bool + Value() T on a struct named Maybe[...]) since the
+// runtime type lives in each generated binary, not in a shared package.
+func bindArgs(args []any) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
+		out[i] = bindArg(a)
+	}
+	return out
+}
+
+func bindArg(v any) any {
+	if v == nil {
+		return nil
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Struct || !strings.HasPrefix(rv.Type().Name(), "Maybe[") {
+		return v
+	}
+	isNone := rv.MethodByName("IsNone")
+	value := rv.MethodByName("Value")
+	if !isNone.IsValid() || !value.IsValid() {
+		return v
+	}
+	if isNone.Call(nil)[0].Bool() {
+		return nil
+	}
+	return value.Call(nil)[0].Interface()
+}
 
 // scanRows collects every row as an `any` holding a column->value map.
 // The outer slice type is []any (not []map[string]any) so it surfaces on
