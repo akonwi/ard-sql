@@ -7,18 +7,17 @@ It provides a consistent API for PostgreSQL, SQLite, and MySQL using pure-Go dri
 ## Requirements
 
 - Ard 0.26.0 or newer
-- Go 1.26 or newer
 
 ## Installation
 
 ```sh
-ard add <repository-url>@<tag-or-commit> as sql
+ard add github.com/akonwi/ard-sql@latest as sql
 ```
 
 Then import the module:
 
 ```ard
-use sql/sql
+use sql
 ```
 
 For local development:
@@ -31,14 +30,15 @@ sql = { path = "../sql" }
 ## Usage
 
 ```ard
-use sql/sql
+use sql
 
 fn users(database_url: Str) [Any]!Str {
   let db = try sql::open(database_url)
+  defer db.close()
+  
   let rows = try db
     .query("SELECT id, name FROM users WHERE active = @active")
     .all(["active": true])
-  try db.close()
   Result::ok(rows)
 }
 ```
