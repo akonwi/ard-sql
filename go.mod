@@ -1,4 +1,4 @@
-module sql
+module github.com/akonwi/ard-sql
 
 go 1.26
 

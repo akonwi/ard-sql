@@ -1,5 +1,5 @@
 use go:regexp
-use go:sql/ffi
+use go:github.com/akonwi/ard-sql/ffi
 use go:strings
 
 // A wrapper over Go's database/sql, replacing the removed `ard/sql` stdlib module. Backed by pure-Go drivers so the compiled binary needs no
