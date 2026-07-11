@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "root": "root",
+  "packages": [
+    {
+      "id": "git:c5125d0dd6cd13cc:e80c2d2178044f91b4b2e308a1f27ac1044cd3c4",
+      "name": "decode",
+      "git": "https://github.com/akonwi/ard-decode.git",
+      "commit": "e80c2d2178044f91b4b2e308a1f27ac1044cd3c4",
+      "requested": "e80c2d2",
+      "integrity": "sha256:e9c90c64493d89ff1820f365bd1bc6e738e955d889caa60e7993781d5e448816"
+    },
+    {
+      "id": "root",
+      "name": "sql",
+      "path": ".",
+      "dependencies": {
+        "decode": "git:c5125d0dd6cd13cc:e80c2d2178044f91b4b2e308a1f27ac1044cd3c4"
+      }
+    }
+  ]
+}
