@@ -16,7 +16,7 @@ use go:strings
 enum Driver {
   pgx,
   sqlite,
-  mysql
+  mysql,
 }
 
 impl Driver {
@@ -69,11 +69,10 @@ struct PreparedQuery {
 fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQuery!Str {
   mut query_str = sql
   mut values: [Any] = []
-  mut position = 1
 
   for param in params {
     let placeholder = match driver {
-      Driver::pgx => "${position}",
+      Driver::pgx => "${values.size() + 1}",
       _ => "?",
     }
     // Replace only the first remaining occurrence so duplicate params get
@@ -82,7 +81,6 @@ fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQu
 
     let value = try args.get(param) -> _ { Result::err("Missing parameter: {param}") }
     values.push(value)
-    position =+ 1
   }
 
   Result::ok(PreparedQuery{string: query_str, values: values})
@@ -93,7 +91,6 @@ fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQu
 struct Database {
   handle: mut sql::DB,
   driver: Driver,
-  url: Str,
 }
 
 struct Transaction {
@@ -136,13 +133,7 @@ private fn _open(driver: Driver, url: Str) (mut sql::DB)!Str {
 fn open(url: Str) Database!Str {
   let driver = Driver::from(url)
   let handle = try _open(driver, url)
-  Result::ok(
-    Database{
-      handle: handle,
-      driver: driver,
-      url: url,
-    },
-  )
+  Result::ok(Database{handle: handle, driver: driver})
 }
 
 impl Database {
@@ -227,9 +218,6 @@ impl Query {
 
   fn first(args: [Str: Any]) Maybe<Any>!Str {
     let rows = try self.all(args)
-    match rows.size() {
-      0 => Result::ok(Maybe::new<Any>()),
-      _ => Result::ok(Maybe::new(rows.at(0).expect("size checked"))),
-    }
+    Result::ok(rows.at(0))
   }
 }
