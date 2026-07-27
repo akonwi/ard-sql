@@ -9,8 +9,7 @@ use go:strings
 //   - "sqlite" (modernc.org/sqlite)              for SQLite
 //   - "mysql"  (github.com/go-sql-driver/mysql)  for MySQL
 //
-// Public surface intentionally mirrors the old ard/sql API so callers don't
-// change: Database.query("...").all(["name": val]) etc. Rows come back as
+// Database.query("...").all(["name": val]) etc. Rows come back as
 // [Str: Any] maps, suitable for decoding into typed values.
 
 // ─── Driver detection ────────────────────────────────────────────────────
@@ -32,8 +31,7 @@ fn detect_driver(url: Str) Str {
 // Each occurrence of a @name (including repeats) becomes one placeholder
 // and one value is looked up from the args map by that name.
 
-// Named-param regex: @ followed by an identifier. Kept simple to match the
-// only shapes migr actually emits (@name, @batch, etc.).
+// Named-param regex: @ followed by an identifier.
 let param_regex: mut regexp::Regexp = regexp::MustCompile("@([A-Za-z_][A-Za-z0-9_]*)")
 
 fn extract_params(sql: Str) [Str] {
@@ -117,8 +115,7 @@ impl Database {
   }
 
   fn exec(stmt: Str) Void!Str {
-    mut empty: [Any] = []
-    ffi::ExecDB(self.handle, stmt, empty)
+    ffi::ExecDB(self.handle, stmt, mut List::new<Any>())
   }
 
   fn query(stmt: Str) Query {
@@ -127,7 +124,6 @@ impl Database {
       params: extract_params(stmt),
       driver: self.driver,
       db: Maybe::new(self.handle),
-      tx: Maybe::new<mut ffi::Tx>(),
     }
   }
 
@@ -139,8 +135,7 @@ impl Database {
 
 impl Transaction {
   fn exec(stmt: Str) Void!Str {
-    mut empty: [Any] = []
-    ffi::ExecTx(self.handle, stmt, empty)
+    ffi::ExecTx(self.handle, stmt, mut List::new<Any>())
   }
 
   fn query(stmt: Str) Query {
@@ -148,7 +143,6 @@ impl Transaction {
       string: stmt,
       params: extract_params(stmt),
       driver: self.driver,
-      db: Maybe::new<mut ffi::DB>(),
       tx: Maybe::new(self.handle),
     }
   }
