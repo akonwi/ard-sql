@@ -1,6 +1,7 @@
 package ffi
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 )
@@ -106,27 +107,27 @@ func TestBindArg_UnwrapsMaybe(t *testing.T) {
 	}
 }
 
-// End-to-end through a real SQLite connection: write a none and a some
-// into a nullable column via ExecDB, read them back.
-func TestBindArgs_NullableRoundTrip(t *testing.T) {
-	db, err := Open("sqlite", ":memory:")
+// End-to-end through a native database/sql handle: write a none and a some
+// through the Ard list-to-variadic bridge, then read them back.
+func TestHandleBridge_NullableRoundTrip(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer Close(db)
+	defer db.Close()
 
-	if err := ExecDB(db, "CREATE TABLE scores (id INTEGER PRIMARY KEY, points INTEGER)", nil); err != nil {
+	if err := ExecDBHandle(db, "CREATE TABLE scores (id INTEGER PRIMARY KEY, points INTEGER)", nil); err != nil {
 		t.Fatal(err)
 	}
 	three := 3
-	if err := ExecDB(db, "INSERT INTO scores (id, points) VALUES (?, ?)", []any{1, Maybe[int]{value: &three}}); err != nil {
+	if err := ExecDBHandle(db, "INSERT INTO scores (id, points) VALUES (?, ?)", []any{1, Maybe[int]{value: &three}}); err != nil {
 		t.Fatalf("insert some: %v", err)
 	}
-	if err := ExecDB(db, "INSERT INTO scores (id, points) VALUES (?, ?)", []any{2, Maybe[int]{}}); err != nil {
+	if err := ExecDBHandle(db, "INSERT INTO scores (id, points) VALUES (?, ?)", []any{2, Maybe[int]{}}); err != nil {
 		t.Fatalf("insert none: %v", err)
 	}
 
-	rows, err := QueryDB(db, "SELECT points FROM scores ORDER BY id", nil)
+	rows, err := QueryDBHandle(db, "SELECT points FROM scores ORDER BY id", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

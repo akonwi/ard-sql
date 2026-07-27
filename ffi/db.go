@@ -1,11 +1,6 @@
-// Package ffi hosts the Go-side database support for the Ard `sql` package. It replaces the removed `ard/sql` stdlib module.
-//
-// Ard can't drive database/sql directly (variadic ...any parameters,
-// pointer-out Scan). This package exposes a small, value-in / value-out
-// API that sql.ard wraps.
-//
-// Pure-Go drivers are used for every supported dialect so a static
-// (CGO-free) binary is possible on Alpine.
+// Package ffi bridges Ard lists and row values to database/sql while Ard
+// retains native *sql.DB and *sql.Tx handles. Pure-Go drivers are registered
+// here so compiled binaries can remain CGO-free.
 package ffi
 
 import (
@@ -19,81 +14,27 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// DB and Tx are opaque handles the Ard side only passes around.
-
-type DB struct {
-	inner *sql.DB
-}
-
-type Tx struct {
-	inner *sql.Tx
-}
-
-// Open connects to a database. Driver names correspond to database/sql
-// driver registrations from the blank imports above:
-//   - "pgx"    -> github.com/jackc/pgx/v5/stdlib
-//   - "sqlite" -> modernc.org/sqlite (pure Go)
-//   - "mysql"  -> github.com/go-sql-driver/mysql (pure Go)
-func Open(driver, url string) (*DB, error) {
-	inner, err := sql.Open(driver, url)
-	if err != nil {
-		return nil, err
-	}
-	if err := inner.Ping(); err != nil {
-		inner.Close()
-		return nil, err
-	}
-	// SQLite is single-writer; keep the pool small and predictable.
-	// For pgx/mysql this is still safe, just conservative.
-	if driver == "sqlite" {
-		inner.SetMaxOpenConns(1)
-	}
-	return &DB{inner: inner}, nil
-}
-
-func Close(db *DB) error {
-	return db.inner.Close()
-}
-
-// --- Non-transactional operations ---
-
-func ExecDB(db *DB, query string, args []any) error {
-	_, err := db.inner.Exec(query, bindArgs(args)...)
+// ExecDBHandle and QueryDBHandle bridge Ard lists to database/sql's
+// variadic argument API while allowing Ard to retain the native *sql.DB handle.
+func ExecDBHandle(db *sql.DB, query string, args []any) error {
+	_, err := db.Exec(query, bindArgs(args)...)
 	return err
 }
 
-func QueryDB(db *DB, query string, args []any) ([]any, error) {
-	return scanRows(db.inner.Query(query, bindArgs(args)...))
+func QueryDBHandle(db *sql.DB, query string, args []any) ([]any, error) {
+	return scanRows(db.Query(query, bindArgs(args)...))
 }
 
-func Begin(db *DB) (*Tx, error) {
-	tx, err := db.inner.Begin()
-	if err != nil {
-		return nil, err
-	}
-	return &Tx{inner: tx}, nil
-}
-
-// --- Transactional operations ---
-
-func ExecTx(tx *Tx, query string, args []any) error {
-	_, err := tx.inner.Exec(query, bindArgs(args)...)
+// ExecTxHandle and QueryTxHandle are the transaction equivalents of the
+// native database handle bridges above.
+func ExecTxHandle(tx *sql.Tx, query string, args []any) error {
+	_, err := tx.Exec(query, bindArgs(args)...)
 	return err
 }
 
-func QueryTx(tx *Tx, query string, args []any) ([]any, error) {
-	return scanRows(tx.inner.Query(query, bindArgs(args)...))
+func QueryTxHandle(tx *sql.Tx, query string, args []any) ([]any, error) {
+	return scanRows(tx.Query(query, bindArgs(args)...))
 }
-
-func Commit(tx *Tx) error {
-	return tx.inner.Commit()
-}
-
-func Rollback(tx *Tx) error {
-	return tx.inner.Rollback()
-}
-
-// --- Internal ---
 
 // bindArgs maps Ard values into driver-friendly bind parameters.
 // Notably it unwraps Ard's Maybe[T] optionals: a none becomes SQL NULL,
