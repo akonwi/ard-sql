@@ -13,14 +13,30 @@ use go:strings
 // Database.query("...").all(["name": val]) etc. Rows come back as
 // [Str: Any] maps, suitable for decoding into typed values.
 
+enum Driver {
+  pgx,
+  sqlite,
+  mysql
+}
+
+impl Driver {
+  fn to_str() Str {
+    match self {
+      Driver::pgx => "pgx",
+      Driver::sqlite => "sqlite",
+      Driver::mysql => "mysql",
+    }
+  }
+}
+
 // ─── Driver detection ────────────────────────────────────────────────────
 
-fn detect_driver(url: Str) Str {
+fn Driver::from(url: Str) Driver {
   let u = strings::TrimSpace(url)
   match {
-    strings::HasPrefix(u, "postgres://") or strings::HasPrefix(u, "postgresql://") => "pgx",
-    strings::Contains(u, "@tcp(") or strings::Contains(u, "@unix(") => "mysql",
-    _ => "sqlite",
+    strings::HasPrefix(u, "postgres://") or strings::HasPrefix(u, "postgresql://") => Driver::pgx,
+    strings::Contains(u, "@tcp(") or strings::Contains(u, "@unix(") => Driver::mysql,
+    _ => Driver::sqlite,
   }
 }
 
@@ -50,14 +66,14 @@ struct PreparedQuery {
   values: [Any],
 }
 
-fn prepare(sql: Str, driver: Str, params: [Str], args: [Str: Any]) PreparedQuery!Str {
+fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQuery!Str {
   mut query_str = sql
   mut values: [Any] = []
   mut position = 1
 
   for param in params {
     let placeholder = match driver {
-      "pgx" => "${position}",
+      Driver::pgx => "${position}",
       _ => "?",
     }
     // Replace only the first remaining occurrence so duplicate params get
@@ -76,13 +92,13 @@ fn prepare(sql: Str, driver: Str, params: [Str], args: [Str: Any]) PreparedQuery
 
 struct Database {
   handle: mut sql::DB,
-  driver: Str,
+  driver: Driver,
   url: Str,
 }
 
 struct Transaction {
   handle: mut sql::Tx,
-  driver: Str,
+  driver: Driver,
 }
 
 // A Query is bound to either a Database or a Transaction (exactly one of
@@ -91,7 +107,7 @@ struct Transaction {
 struct Query {
   string: Str,
   params: [Str],
-  driver: Str,
+  driver: Driver,
   db: (mut sql::DB)?,
   tx: (mut sql::Tx)?,
 }
@@ -103,14 +119,14 @@ struct Query {
 //   - "pgx"    -> github.com/jackc/pgx/v5/stdlib
 //   - "sqlite" -> modernc.org/sqlite (pure Go)
 //   - "mysql"  -> github.com/go-sql-driver/mysql (pure Go)
-private fn _open(driver: Str, url: Str) (mut sql::DB)!Str {
-  let db = try sql::Open(driver, url)
+private fn _open(driver: Driver, url: Str) (mut sql::DB)!Str {
+  let db = try sql::Open(driver.to_str(), url)
   try db.Ping() -> err {
     db.Close()
     Result::err(err)
   }
 
-  if driver == "sqlite" {
+  if driver == Driver::sqlite {
     db.SetMaxOpenConns(1)
   }
 
@@ -118,7 +134,7 @@ private fn _open(driver: Str, url: Str) (mut sql::DB)!Str {
 }
 
 fn open(url: Str) Database!Str {
-  let driver = detect_driver(url)
+  let driver = Driver::from(url)
   let handle = try _open(driver, url)
   Result::ok(
     Database{
