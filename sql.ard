@@ -52,13 +52,13 @@ fn Driver::from(url: Str) Driver {
 let param_regex: mut regexp::Regexp = regexp::MustCompile("@([A-Za-z_][A-Za-z0-9_]*)")
 
 fn extract_params(sql: Str) [Str] {
-  mut params: [Str] = []
+  let params = mut List::new<Str>()
   let matches = param_regex.FindAllStringSubmatch(sql, -1)
   for match_group in matches {
     let name = match_group.at(1).expect("regex has one capture group")
     params.push(name)
   }
-  params
+  deref params
 }
 
 struct PreparedQuery {
@@ -68,7 +68,7 @@ struct PreparedQuery {
 
 fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQuery!Str {
   mut query_str = sql
-  mut values: [Any] = []
+  let values = mut List::new<Any>()
 
   for param in params {
     let placeholder = match driver {
@@ -83,7 +83,7 @@ fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQu
     values.push(value)
   }
 
-  Result::ok(PreparedQuery{string: query_str, values: values})
+  Result::ok(PreparedQuery{string: query_str, values: deref values})
 }
 
 // ─── Handles ─────────────────────────────────────────────────────────────
@@ -142,8 +142,7 @@ impl Database {
   }
 
   fn exec(stmt: Str) Void!Str {
-    mut args = List::new<Any>()
-    ffi::ExecDBHandle(self.handle, stmt, args)
+    ffi::ExecDBHandle(self.handle, stmt, mut List::new<Any>())
   }
 
   fn query(stmt: Str) Query {
@@ -163,8 +162,7 @@ impl Database {
 
 impl Transaction {
   fn exec(stmt: Str) Void!Str {
-    mut args = List::new<Any>()
-    ffi::ExecTxHandle(self.handle, stmt, args)
+    ffi::ExecTxHandle(self.handle, stmt, mut List::new<Any>())
   }
 
   fn query(stmt: Str) Query {
@@ -190,12 +188,11 @@ impl Transaction {
 impl Query {
   fn run(args: [Str: Any]) Void!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args)
-    mut values = prepared.values
     match self.db {
-      db => ffi::ExecDBHandle(db, prepared.string, values),
+      db => ffi::ExecDBHandle(db, prepared.string, mut prepared.values),
       _ => {
         match self.tx {
-          tx => ffi::ExecTxHandle(tx, prepared.string, values),
+          tx => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values),
           _ => Result::err("Query bound to neither a Database nor a Transaction"),
         }
       },
@@ -204,12 +201,11 @@ impl Query {
 
   fn all(args: [Str: Any]) [Any]!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args)
-    mut values = prepared.values
     match self.db {
-      db => ffi::QueryDBHandle(db, prepared.string, values),
+      db => ffi::QueryDBHandle(db, prepared.string, mut prepared.values),
       _ => {
         match self.tx {
-          tx => ffi::QueryTxHandle(tx, prepared.string, values),
+          tx => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values),
           _ => Result::err("Query bound to neither a Database nor a Transaction"),
         }
       },
