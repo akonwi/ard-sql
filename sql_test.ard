@@ -21,7 +21,7 @@ test fn sql_null_survives_as_nil_for_decode_nullable() Void!Str {
   try db.exec("INSERT INTO t (id, name) VALUES (1, NULL)")
   try db.exec("INSERT INTO t (id, name) VALUES (2, 'ada')")
 
-  let rows = try db.query("SELECT name FROM t ORDER BY id ASC").all([:])
+  let rows = try db.query("SELECT name FROM t ORDER BY id ASC").all()
   try testing::assert(rows.size() == 2, "two rows returned")
 
   let null_row = rows.at(0).expect("row 0")
@@ -57,8 +57,8 @@ test fn query_supports_named_parameters() Void!Str {
 test fn first_returns_none_when_no_rows_match() Void!Str {
   let db = try sql::open(":memory:")
   defer db.close()
-  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY)")
-  let row = try db.query("SELECT id FROM users").first([:])
+  try db.query("CREATE TABLE users (id INTEGER PRIMARY KEY)").run()
+  let row = try db.query("SELECT id FROM users").first()
   try testing::assert(row.is_none(), "empty query has no first row")
   testing::pass()
 }
@@ -71,7 +71,7 @@ test fn transaction_commit_persists_changes() Void!Str {
   try tx.query("INSERT INTO users (id) VALUES (@id)").run(["id": 1])
   try tx.commit()
 
-  let rows = try db.query("SELECT id FROM users").all([:])
+  let rows = try db.query("SELECT id FROM users").all()
   try testing::assert(rows.size() == 1, "committed row is visible")
   testing::pass()
 }
@@ -84,7 +84,7 @@ test fn transaction_rollback_discards_changes() Void!Str {
   try tx.query("INSERT INTO users (id) VALUES (@id)").run(["id": 1])
   try tx.rollback()
 
-  let rows = try db.query("SELECT id FROM users").all([:])
+  let rows = try db.query("SELECT id FROM users").all()
   try testing::assert(rows.size() == 0, "rolled back row is absent")
   testing::pass()
 }
@@ -92,7 +92,7 @@ test fn transaction_rollback_discards_changes() Void!Str {
 test fn query_reports_missing_parameters() Void!Str {
   let db = try sql::open(":memory:")
   defer db.close()
-  match db.query("SELECT @missing").all([:]) {
+  match db.query("SELECT @missing").all() {
     ok(_) => testing::fail("missing parameter should fail"),
     err(e) => testing::assert(e == "Missing parameter: missing", "identifies the missing parameter"),
   }

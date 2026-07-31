@@ -184,23 +184,23 @@ impl Transaction {
 // ─── Query execution ─────────────────────────────────────────────────────
 
 impl Query {
-  fn run(args: [Str: Any]) Void!Str {
-    let prepared = try prepare(self.string, self.driver, self.params, args)
+  fn run(args: [Str: Any]?) Void!Str {
+    let prepared = try prepare(self.string, self.driver, self.params, args.or([:]))
     match self._target {
       sql::DB(db) => ffi::ExecDBHandle(db, prepared.string, mut prepared.values),
       sql::Tx(tx) => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values),
     }
   }
 
-  fn all(args: [Str: Any]) [Any]!Str {
-    let prepared = try prepare(self.string, self.driver, self.params, args)
+  fn all(args: [Str: Any]?) [Any]!Str {
+    let prepared = try prepare(self.string, self.driver, self.params, args.or([:]))
     match self._target {
       sql::DB(db) => ffi::QueryDBHandle(db, prepared.string, mut prepared.values),
       sql::Tx(tx) => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values),
     }
   }
 
-  fn first(args: [Str: Any]) Maybe<Any>!Str {
+  fn first(args: [Str: Any]?) Maybe<Any>!Str {
     let rows = try self.all(args)
     Result::ok(rows.at(0))
   }
