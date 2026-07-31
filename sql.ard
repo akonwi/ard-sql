@@ -98,15 +98,13 @@ struct Transaction {
   driver: Driver,
 }
 
-// A Query is bound to either a Database or a Transaction (exactly one of
-// db / tx is set). Ard doesn't have sum types across FFI cleanly here, so
-// two nullable fields with a runtime invariant is the simplest thing.
+type QueryTarget = mut sql::DB | mut sql::Tx
+
 struct Query {
   string: Str,
   params: [Str],
   driver: Driver,
-  db: (mut sql::DB)?,
-  tx: (mut sql::Tx)?,
+  _target: QueryTarget,
 }
 
 // ─── Open / close / begin ────────────────────────────────────────────────
@@ -150,7 +148,7 @@ impl Database {
       string: stmt,
       params: extract_params(stmt),
       driver: self.driver,
-      db: Maybe::new(self.handle),
+      _target: self.handle,
     }
   }
 
@@ -170,7 +168,7 @@ impl Transaction {
       string: stmt,
       params: extract_params(stmt),
       driver: self.driver,
-      tx: Maybe::new(self.handle),
+      _target: self.handle,
     }
   }
 
@@ -188,27 +186,17 @@ impl Transaction {
 impl Query {
   fn run(args: [Str: Any]) Void!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args)
-    match self.db {
-      db => ffi::ExecDBHandle(db, prepared.string, mut prepared.values),
-      _ => {
-        match self.tx {
-          tx => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values),
-          _ => Result::err("Query bound to neither a Database nor a Transaction"),
-        }
-      },
+    match self._target {
+      sql::DB(db) => ffi::ExecDBHandle(db, prepared.string, mut prepared.values),
+      sql::Tx(tx) => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values),
     }
   }
 
   fn all(args: [Str: Any]) [Any]!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args)
-    match self.db {
-      db => ffi::QueryDBHandle(db, prepared.string, mut prepared.values),
-      _ => {
-        match self.tx {
-          tx => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values),
-          _ => Result::err("Query bound to neither a Database nor a Transaction"),
-        }
-      },
+    match self._target {
+      sql::DB(db) => ffi::QueryDBHandle(db, prepared.string, mut prepared.values),
+      sql::Tx(tx) => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values),
     }
   }
 
