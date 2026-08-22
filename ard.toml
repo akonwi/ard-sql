@@ -1,4 +1,4 @@
-ard = ">= 0.37.0"
+ard = ">= 0.38.0"
 name = "sql"
 
 [dependencies]

@@ -3,6 +3,10 @@ use go:github.com/akonwi/ard-sql/ffi
 use go:regexp
 use go:strings
 
+private fn error_message(error: Error) Str {
+  error.error()
+}
+
 // A wrapper over Go's database/sql, replacing the removed `ard/sql` stdlib module. Backed by pure-Go drivers so the compiled binary needs no
 // CGO:
 //
@@ -115,8 +119,8 @@ struct Query {
 //   - "sqlite" -> modernc.org/sqlite (pure Go)
 //   - "mysql"  -> github.com/go-sql-driver/mysql (pure Go)
 private fn _open(driver: Driver, url: Str) (mut sql::DB)!Str {
-  let db = try sql::Open(driver.to_str(), url)
-  try db.Ping() -> err {
+  let db = try sql::Open(driver.to_str(), url).map_err(error_message)
+  try db.Ping().map_err(error_message) -> err {
     db.Close()
     Result::err(err)
   }
@@ -136,11 +140,11 @@ fn open(url: Str) Database!Str {
 
 impl Database {
   fn close() Void!Str {
-    self.handle.Close()
+    self.handle.Close().map_err(error_message)
   }
   
   fn exec(stmt: Str) Void!Str {
-    ffi::ExecDBHandle(self.handle, stmt, mut List::new<Any>())
+    ffi::ExecDBHandle(self.handle, stmt, mut List::new<Any>()).map_err(error_message)
   }
   
   fn query(stmt: Str) Query {
@@ -153,14 +157,14 @@ impl Database {
   }
   
   fn begin() Transaction!Str {
-    let tx = try self.handle.Begin()
+    let tx = try self.handle.Begin().map_err(error_message)
     Result::ok(Transaction{handle: tx, driver: self.driver})
   }
 }
 
 impl Transaction {
   fn exec(stmt: Str) Void!Str {
-    ffi::ExecTxHandle(self.handle, stmt, mut List::new<Any>())
+    ffi::ExecTxHandle(self.handle, stmt, mut List::new<Any>()).map_err(error_message)
   }
   
   fn query(stmt: Str) Query {
@@ -173,11 +177,11 @@ impl Transaction {
   }
   
   fn commit() Void!Str {
-    self.handle.Commit()
+    self.handle.Commit().map_err(error_message)
   }
   
   fn rollback() Void!Str {
-    self.handle.Rollback()
+    self.handle.Rollback().map_err(error_message)
   }
 }
 
@@ -187,16 +191,16 @@ impl Query {
   fn run(args: [Str: Any]?) Void!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args.or([:]))
     match self._target {
-      sql::DB(db) => ffi::ExecDBHandle(db, prepared.string, mut prepared.values),
-      sql::Tx(tx) => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values),
+      sql::DB(db) => ffi::ExecDBHandle(db, prepared.string, mut prepared.values).map_err(error_message),
+      sql::Tx(tx) => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values).map_err(error_message),
     }
   }
   
   fn all(args: [Str: Any]?) [Any]!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args.or([:]))
     match self._target {
-      sql::DB(db) => ffi::QueryDBHandle(db, prepared.string, mut prepared.values),
-      sql::Tx(tx) => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values),
+      sql::DB(db) => ffi::QueryDBHandle(db, prepared.string, mut prepared.values).map_err(error_message),
+      sql::Tx(tx) => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values).map_err(error_message),
     }
   }
   
