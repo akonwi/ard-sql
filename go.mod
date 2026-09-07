@@ -1,6 +1,6 @@
 module github.com/akonwi/ard-sql
 
-go 1.26
+go 1.25
 
 require (
 	github.com/go-sql-driver/mysql v1.8.1

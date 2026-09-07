@@ -17,10 +17,13 @@ private fn error_message(error: Error) Str {
 // Database.query("...").all(["name": val]) etc. Rows come back as
 // [Str: Any] maps, suitable for decoding into typed values.
 
+// Supported database/sql drivers and their query placeholder dialects.
+// D1 handles are supplied by integration packages through from_handle.
 enum Driver {
   pgx,
   sqlite,
   mysql,
+  d1,
 }
 
 impl Driver {
@@ -29,6 +32,7 @@ impl Driver {
       Driver::pgx => "pgx",
       Driver::sqlite => "sqlite",
       Driver::mysql => "mysql",
+      Driver::d1 => "d1",
     }
   }
 }
@@ -118,24 +122,29 @@ struct Query {
 //   - "pgx"    -> github.com/jackc/pgx/v5/stdlib
 //   - "sqlite" -> modernc.org/sqlite (pure Go)
 //   - "mysql"  -> github.com/go-sql-driver/mysql (pure Go)
-private fn _open(driver: Driver, url: Str) (mut sql::DB)!Str {
-  let db = try sql::Open(driver.to_str(), url).map_err(error_message)
-  try db.Ping().map_err(error_message) -> err {
-    db.Close()
+// Wraps and verifies a database/sql handle supplied by another Ard package.
+// The driver selects the SQL placeholder dialect used by Query.
+fn from_handle(handle: mut sql::DB, driver: Driver) Database!Str {
+  try handle.Ping().map_err(error_message) -> err {
+    handle.Close()
     Result::err(err)
   }
   
   if driver == Driver::sqlite {
-    db.SetMaxOpenConns(1)
+    handle.SetMaxOpenConns(1)
   }
   
-  Result::ok(db)
+  Result::ok(Database{handle: handle, driver: driver})
+}
+
+private fn _open(driver: Driver, url: Str) (mut sql::DB)!Str {
+  sql::Open(driver.to_str(), url).map_err(error_message)
 }
 
 fn open(url: Str) Database!Str {
   let driver = Driver::from(url)
   let handle = try _open(driver, url)
-  Result::ok(Database{handle: handle, driver: driver})
+  from_handle(handle, driver)
 }
 
 impl Database {
