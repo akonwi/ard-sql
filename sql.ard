@@ -77,7 +77,7 @@ struct PreparedQuery {
 fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQuery!Str {
   mut query_str = sql
   let values = mut List::new<Any>()
-  
+
   for param in params {
     let placeholder = match driver {
       Driver::pgx => "${values.size() + 1}",
@@ -86,11 +86,11 @@ fn prepare(sql: Str, driver: Driver, params: [Str], args: [Str: Any]) PreparedQu
     // Replace only the first remaining occurrence so duplicate params get
     // distinct positional bindings under pgx.
     query_str = strings::Replace(query_str, "@{param}", placeholder, 1)
-    
+
     let value = try args.get(param) -> _ { Result::err("Missing parameter: {param}") }
     values.push(value)
   }
-  
+
   Result::ok(PreparedQuery{string: query_str, values: values.@})
 }
 
@@ -129,11 +129,11 @@ fn from_handle(handle: mut sql::DB, driver: Driver) Database!Str {
     handle.Close()
     Result::err(err)
   }
-  
+
   if driver == Driver::sqlite {
     handle.SetMaxOpenConns(1)
   }
-  
+
   Result::ok(Database{handle: handle, driver: driver})
 }
 
@@ -151,11 +151,11 @@ impl Database {
   fn close() Void!Str {
     self.handle.Close().map_err(error_message)
   }
-  
+
   fn exec(stmt: Str) Void!Str {
     ffi::ExecDBHandle(self.handle, stmt, mut List::new<Any>()).map_err(error_message)
   }
-  
+
   fn query(stmt: Str) Query {
     Query{
       string: stmt,
@@ -164,7 +164,7 @@ impl Database {
       _target: self.handle,
     }
   }
-  
+
   fn begin() Transaction!Str {
     let tx = try self.handle.Begin().map_err(error_message)
     Result::ok(Transaction{handle: tx, driver: self.driver})
@@ -175,7 +175,7 @@ impl Transaction {
   fn exec(stmt: Str) Void!Str {
     ffi::ExecTxHandle(self.handle, stmt, mut List::new<Any>()).map_err(error_message)
   }
-  
+
   fn query(stmt: Str) Query {
     Query{
       string: stmt,
@@ -184,11 +184,11 @@ impl Transaction {
       _target: self.handle,
     }
   }
-  
+
   fn commit() Void!Str {
     self.handle.Commit().map_err(error_message)
   }
-  
+
   fn rollback() Void!Str {
     self.handle.Rollback().map_err(error_message)
   }
@@ -204,7 +204,7 @@ impl Query {
       sql::Tx(tx) => ffi::ExecTxHandle(tx, prepared.string, mut prepared.values).map_err(error_message),
     }
   }
-  
+
   fn all(args: [Str: Any]?) [Any]!Str {
     let prepared = try prepare(self.string, self.driver, self.params, args.or([:]))
     match self._target {
@@ -212,7 +212,7 @@ impl Query {
       sql::Tx(tx) => ffi::QueryTxHandle(tx, prepared.string, mut prepared.values).map_err(error_message),
     }
   }
-  
+
   fn first(args: [Str: Any]?) Maybe<Any>!Str {
     let rows = try self.all(args)
     Result::ok(rows.at(0))
