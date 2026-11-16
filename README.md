@@ -6,7 +6,7 @@ It provides a consistent API for PostgreSQL, SQLite, and MySQL using pure-Go dri
 
 ## Requirements
 
-- Ard 0.26.0 or newer
+- Ard 0.48.0 or newer
 
 ## Installation
 

@@ -1,5 +1,5 @@
-ard = ">= 0.45.0"
+ard = ">= 0.48.0"
 name = "sql"
 
 [dependencies]
-decode = { git = "https://github.com/akonwi/ard-decode.git", commit = "82741ef8a23c0676fef4453b8c35f421a42accff" }
+decode = { git = "https://github.com/akonwi/ard-decode.git", commit = "891e71c0d5b48e4220795865fb6729541ad8cee3" }
