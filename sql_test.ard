@@ -69,10 +69,11 @@ test fn transaction_commit_persists_changes() Void!Str {
   try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY)")
   let tx = try db.begin()
   try tx.query("INSERT INTO users (id) VALUES (@id)").run(["id": 1])
+  try tx.exec("INSERT INTO users (id) VALUES (2)")
   try tx.commit()
 
   let rows = try db.query("SELECT id FROM users").all()
-  try testing::assert(rows.size() == 1, "committed row is visible")
+  try testing::assert(rows.size() == 2, "committed rows are visible")
   testing::pass()
 }
 
@@ -96,4 +97,24 @@ test fn query_reports_missing_parameters() Void!Str {
     ok(_) => testing::fail("missing parameter should fail"),
     err(e) => testing::assert(e == "Missing parameter: missing", "identifies the missing parameter"),
   }
+}
+
+test fn maybe_parameters_bind_as_value_or_null() Void!Str {
+  let db = try sql::open(":memory:")
+  defer db.close()
+  try db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
+
+  let present: Str? = Maybe::new("ada")
+  let absent: Str? = Maybe::new()
+  try db.query("INSERT INTO users (id, name) VALUES (@id, @name)").run(["id": 1, "name": present])
+  try db.query("INSERT INTO users (id, name) VALUES (@id, @name)").run(["id": 2, "name": absent])
+
+  let rows = try db.query("SELECT id FROM users WHERE name IS NULL").all()
+  try testing::assert(rows.size() == 1, "none binds as NULL")
+  let row = try db.query("SELECT name FROM users WHERE id = 1").first()
+  let name = try decode::run(row.expect("row 1"), decode::field("name", decode::string)) -> err {
+    Result::err(err.to_str())
+  }
+  try testing::assert(name == "ada", "some binds as its value")
+  testing::pass()
 }
